@@ -56,6 +56,17 @@ async def async_setup_entry(
                 entity_name="Battery",
             ),
             DemoSensor(
+                "battery_2",
+                "sensor_2",
+                "Outside Temperatureeeeee",
+                12,
+                SensorDeviceClass.BATTERY,
+                SensorStateClass.MEASUREMENT,
+                UnitOfRatio.PERCENTAGE,
+                entity_category=EntityCategory.DIAGNOSTIC,
+                entity_name="Battery",
+            ),
+            DemoSensor(
                 "sensor_2",
                 "sensor_2",
                 "Outside Humidity",
@@ -131,7 +142,7 @@ async def async_setup_entry(
             ),
             DemoSumSensor(
                 "sensor_9",
-                "Total gas 2",
+                "Total gas 2 Dipto (visible change)",
                 1.0,  # 12 ft³/h (0.34 m³ / h)
                 SensorDeviceClass.GAS,
                 SensorStateClass.TOTAL,
@@ -148,6 +159,15 @@ async def async_setup_entry(
                 unit_of_measurement=None,
                 options=["away", "comfort", "eco", "sleep"],
                 translation_key="thermostat_mode",
+            ),
+            DemoSumSensor(
+                "sensor_last (Dipto)",
+                "Assignment visible change",
+                1.0,  # 12 ft³/h (0.34 m³ / h)
+                SensorDeviceClass.GAS,
+                SensorStateClass.TOTAL,
+                UnitOfVolume.CUBIC_FEET,
+                "total_gas_ft3",
             ),
         ]
     )
