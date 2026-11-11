@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Electricity Price Planner</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">
+          <span aria-hidden="true">↯</span> ENERGY PLANNING
+        </div>
+        <h1>Electricity Price Planner</h1>
+        <p>
+          Find the best time to use electricity and save on your energy costs.
+        </p>
+      </header>
+      <div class="data-banner">
+        <span
+          ><i aria-hidden="true"></i> Example electricity prices — not live
+          data</span
+        >
+        <label
+          >Sample scenario
+          <select id="scenario" disabled></select
+        ></label>
+      </div>
+      <div class="layout">
+        <section class="card chart-card" aria-labelledby="chart-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">YOUR PRICE OUTLOOK</p>
+              <h2 id="chart-title">Electricity prices</h2>
+            </div>
+            <label class="compact"
+              >Display timezone
+              <select id="timezone">
+                <option value="UTC">UTC</option>
+                <option value="Europe/Stockholm">Europe/Stockholm</option>
+              </select>
+            </label>
+          </div>
+          <p id="chart-date" class="muted"></p>
+          <div class="chart-toolbar">
+            <label
+              >View
+              <select id="range">
+                <option value="all">All available</option>
+              </select></label
+            >
+            <div class="legend">
+              <span><i></i>Electricity price</span
+              ><span><i class="green"></i>Best running period</span>
+            </div>
+          </div>
+          <div id="chart" aria-label="Electricity price chart"></div>
+          <p id="tooltip" class="tooltip" aria-live="polite">
+            Hover over or focus a bar to see its time and price.
+          </p>
+          <p class="note">
+            View changes only the graph. Your recommendation always searches the
+            full allowed period.
+          </p>
+        </section>
+        <aside class="planner">
+          <form id="calculator" class="card duration-card">
+            <p class="eyebrow">PLAN YOUR NEXT RUN</p>
+            <h2>How long will your appliance run?</h2>
+            <div
+              class="duration-options"
+              role="group"
+              aria-label="Running duration"
+            >
+              <button type="button" data-minutes="60" aria-pressed="false">
+                1 hour
+              </button>
+              <button type="button" data-minutes="120" aria-pressed="true">
+                2 hours
+              </button>
+              <button type="button" data-minutes="180" aria-pressed="false">
+                3 hours
+              </button>
+            </div>
+            <label class="custom-label"
+              >Or choose a duration in minutes
+              <input
+                id="duration"
+                type="number"
+                min="1"
+                step="1"
+                value="120"
+                required
+              />
+            </label>
+            <button class="primary" id="calculate" type="submit">
+              Find best time <span aria-hidden="true">→</span>
+            </button>
+          </form>
+          <section
+            class="card recommendation"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <p class="eyebrow">
+              <span aria-hidden="true">✦</span> YOUR RECOMMENDATION
+            </p>
+            <h2>Best time to run your appliance</h2>
+            <p id="status">Loading example prices…</p>
+            <div id="error" role="alert" hidden></div>
+            <div id="result" hidden>
+              <div class="time-pair">
+                <div>
+                  <span>Start</span><strong id="start-time"></strong
+                  ><small id="start-date"></small>
+                </div>
+                <span aria-hidden="true">→</span>
+                <div>
+                  <span>End</span><strong id="end-time"></strong
+                  ><small id="end-date"></small>
+                </div>
+              </div>
+              <dl>
+                <div>
+                  <dt>Running duration</dt>
+                  <dd id="running-duration"></dd>
+                </div>
+                <div>
+                  <dt>Average electricity price</dt>
+                  <dd>
+                    <strong id="average-price"></strong> <small>SEK/kWh</small>
+                  </dd>
+                </div>
+              </dl>
+              <p class="note">
+                One continuous run, highlighted in green on the graph.
+              </p>
+            </div>
+          </section>
+        </aside>
+      </div>
+      <p id="search-summary" class="search-summary"></p>
+      <details class="card developer">
+        <summary>Developer/Test data</summary>
+        <p class="note">
+          Edit the sample request below. Timestamps must include Z or an
+          explicit UTC offset. Prices are SEK/kWh. The allowed search period is
+          independent of the graph view; duration comes from the control above.
+        </p>
+        <label
+          >Sample request (JSON)<textarea
+            id="test-data"
+            spellcheck="false"
+            rows="12"
+          ></textarea>
+        </label>
+        <button type="button" id="apply-data">Apply test data</button>
+        <p id="editor-error" role="alert" hidden></p>
+        <p class="note">
+          Only complete price intervals can be used. Their durations must add up
+          exactly, with no gaps. Equal averages favor the earliest start.
+        </p>
+      </details>
+      <footer>
+        Plan with prices, not consumption. Average prices do not represent your
+        household bill or actual savings.
+      </footer>
+    </main>
+  </body>
+</html>

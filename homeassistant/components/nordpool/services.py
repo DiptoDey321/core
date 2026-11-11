@@ -1,7 +1,7 @@
 """Services for Nord Pool integration."""
 
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import partial
 import logging
 from typing import TYPE_CHECKING
@@ -34,7 +34,15 @@ from homeassistant.util.json import JsonValueType
 
 if TYPE_CHECKING:
     from . import NordPoolConfigEntry
+
+from .cheapest_period import CheapestPeriodError, PriceInterval, find_cheapest_period
 from .const import ATTR_RESOLUTION, DOMAIN
+
+SERVICE_GET_PRICES_FOR_DATE = "get_prices_for_date"
+SERVICE_GET_PRICE_INDICES_FOR_DATE = "get_price_indices_for_date"
+SERVICE_GET_CHEAPEST_PERIOD = "get_cheapest_period"
+
+ATTR_DURATION_MINUTES = "duration_minutes"
 
 
 def _validate_areas(areas: list[str]) -> list[str]:
@@ -44,6 +52,7 @@ def _validate_areas(areas: list[str]) -> list[str]:
     for area in areas:
         validated_area = cv.string(area)
         validated_area = validated_area.upper()
+
         if validated_area not in AREAS:
             raise probatio.Invalid(f"Area {area} is not valid")
 
@@ -53,12 +62,11 @@ def _validate_areas(areas: list[str]) -> list[str]:
 
 
 _LOGGER = logging.getLogger(__name__)
+
 ATTR_CONFIG_ENTRY = "config_entry"
 ATTR_AREAS = "areas"
 ATTR_CURRENCY = "currency"
 
-SERVICE_GET_PRICES_FOR_DATE = "get_prices_for_date"
-SERVICE_GET_PRICE_INDICES_FOR_DATE = "get_price_indices_for_date"
 SERVICE_GET_PRICES_SCHEMA = probatio.Schema(
     {
         probatio.Required(ATTR_CONFIG_ENTRY): ConfigEntrySelector(
@@ -75,12 +83,19 @@ SERVICE_GET_PRICES_SCHEMA = probatio.Schema(
         ),
     }
 )
+
 SERVICE_GET_PRICE_INDICES_SCHEMA = SERVICE_GET_PRICES_SCHEMA.extend(
     {
         probatio.Optional(ATTR_RESOLUTION, default=60): probatio.All(
             cv.positive_int,
             probatio.All(probatio.Coerce(int), probatio.In((15, 30, 60))),
         ),
+    }
+)
+
+SERVICE_GET_CHEAPEST_PERIOD_SCHEMA = SERVICE_GET_PRICES_SCHEMA.extend(
+    {
+        probatio.Required(ATTR_DURATION_MINUTES): cv.positive_int,
     }
 )
 
@@ -93,9 +108,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         call: ServiceCall,
     ) -> tuple[NordPoolClient, date, str, list[str], int]:
         """Return the parameters for the service."""
+
         entry: NordPoolConfigEntry = service.async_get_config_entry(
             hass, DOMAIN, call.data[ATTR_CONFIG_ENTRY]
         )
+
         client = entry.runtime_data.client
         asked_date: date = call.data[ATTR_DATE]
 
@@ -131,7 +148,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         areas: list[str],
         resolution: int,
     ) -> PriceIndicesData:
-        """Get prices."""
+        """Get price indices."""
         return await client.async_get_price_indices(
             datetime.combine(asked_date, dt_util.utcnow().time()),
             Currency(currency),
@@ -139,8 +156,100 @@ def async_setup_services(hass: HomeAssistant) -> None:
             resolution=resolution,
         )
 
-    async def get_prices(func: Callable, call: ServiceCall) -> ServiceResponse:
+    async def get_cheapest_period(
+        call: ServiceCall,
+    ) -> ServiceResponse:
+        """Find the cheapest continuous period for the requested duration."""
+
+        client, asked_date, currency, areas, _ = get_service_params(call)
+
+        duration_minutes = call.data[ATTR_DURATION_MINUTES]
+
+        if len(areas) != 1:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="single_area_required",
+            )
+        area = areas[0]
+
+        try:
+            price_data = await client.async_get_delivery_period(
+                datetime.combine(
+                    asked_date,
+                    dt_util.utcnow().time(),
+                ),
+                Currency(currency),
+                [area],
+            )
+
+        except NordPoolAuthenticationError as error:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="authentication_error",
+            ) from error
+
+        except NordPoolEmptyResponseError as error:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_cheapest_period",
+                translation_placeholders={
+                    "error": "no prices are available for the selected date"
+                },
+            ) from error
+
+        except (NordPoolError, TimeoutError) as error:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="connection_error",
+            ) from error
+        intervals = [
+            PriceInterval(
+                start=entry.start,
+                end=entry.end,
+                price=entry.entry[area] / 1000,
+            )
+            for entry in price_data.entries
+            if entry.entry.get(area) is not None
+        ]
+
+        if not intervals:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_cheapest_period",
+                translation_placeholders={
+                    "error": "no prices are available for the selected area"
+                },
+            )
+
+        try:
+            result = find_cheapest_period(
+                intervals,
+                min(interval.start for interval in intervals),
+                max(interval.end for interval in intervals),
+                timedelta(minutes=duration_minutes),
+            )
+
+        except CheapestPeriodError as error:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_cheapest_period",
+                translation_placeholders={"error": str(error)},
+            ) from error
+
+        return {
+            "area": area,
+            "start": result.start.isoformat(),
+            "end": result.end.isoformat(),
+            "average_price": result.average_price,
+            "unit": f"{currency}/kWh",
+        }
+
+    async def get_prices(
+        func: Callable,
+        call: ServiceCall,
+    ) -> ServiceResponse:
         """Get price service."""
+
         client, asked_date, currency, areas, resolution = get_service_params(call)
 
         try:
@@ -151,13 +260,16 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 areas,
                 resolution,
             )
+
         except NordPoolAuthenticationError as error:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="authentication_error",
             ) from error
+
         except NordPoolEmptyResponseError:
             return {area: [] for area in areas}
+
         except (NordPoolError, TimeoutError) as error:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -165,6 +277,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
             ) from error
 
         result: dict[str, JsonValueType] = {}
+
         for area in areas:
             result[area] = [
                 {
@@ -174,6 +287,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 }
                 for price_entry in price_data.entries
             ]
+
         return result
 
     hass.services.async_register(
@@ -183,10 +297,19 @@ def async_setup_services(hass: HomeAssistant) -> None:
         schema=SERVICE_GET_PRICES_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_GET_PRICE_INDICES_FOR_DATE,
         partial(get_prices, get_price_indices_for_date),
         schema=SERVICE_GET_PRICE_INDICES_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_CHEAPEST_PERIOD,
+        get_cheapest_period,
+        schema=SERVICE_GET_CHEAPEST_PERIOD_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )

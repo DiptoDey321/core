@@ -108,11 +108,43 @@
     "initial_update_failed": {
       "message": "Initial update failed on startup with error {error}"
     },
+    "no_cheapest_period": {
+      "message": "Could not find a cheapest period: {error}"
+    },
     "no_day_data": {
       "message": "Data for current day is missing"
+    },
+    "single_area_required": {
+      "message": "Exactly one area must be selected."
     }
   },
   "services": {
+    "get_cheapest_period": {
+      "description": "Returns the cheapest continuous electricity-price period of a given length on a date.",
+      "fields": {
+        "areas": {
+          "description": "Exactly one market area to evaluate. If left empty the configured area is used, which requires that only one area is configured.",
+          "name": "Areas"
+        },
+        "config_entry": {
+          "description": "The Nord Pool configuration entry for this action.",
+          "name": "Config entry"
+        },
+        "currency": {
+          "description": "Currency to get prices in. If left empty it will use the currency already configured.",
+          "name": "Currency"
+        },
+        "date": {
+          "description": "Date to retrieve prices for.",
+          "name": "Date"
+        },
+        "duration_minutes": {
+          "description": "Length of the run in minutes. It must be a multiple of the price interval length, because intervals are never split.",
+          "name": "Duration"
+        }
+      },
+      "name": "Get cheapest period"
+    },
     "get_price_indices_for_date": {
       "description": "Retrieves the price indices for a specific date.",
       "fields": {
